@@ -1,0 +1,52 @@
+#!/usr/bin/env python3
+"""xfce4-genmon script: Claude 5-hour and weekly usage. Run with --selftest to check formatting."""
+import json, sys, urllib.request
+from datetime import datetime, timezone
+from pathlib import Path
+
+CREDS = Path.home() / ".claude/.credentials.json"
+URL = "https://api.anthropic.com/api/oauth/usage"  # same endpoint Claude Code's /usage reads
+
+
+def until(iso):
+    if not iso:
+        return "?"
+    secs = (datetime.fromisoformat(iso.replace("Z", "+00:00")) - datetime.now(timezone.utc)).total_seconds()
+    h, m = divmod(max(0, int(secs)) // 60, 60)
+    return f"{h // 24}d {h % 24}h" if h >= 24 else f"{h}h {m}m"
+
+
+def color(pct):
+    return "#e06c75" if pct >= 90 else "#e5c07b" if pct >= 70 else "#98c379"
+
+
+def render(data):
+    five, week = data.get("five_hour") or {}, data.get("seven_day") or {}
+    p5, p7 = five.get("utilization") or 0, week.get("utilization") or 0
+    txt = (f"<txt>5h <span fgcolor='{color(p5)}'>{p5:.0f}%</span>  "
+           f"wk <span fgcolor='{color(p7)}'>{p7:.0f}%</span></txt>")
+    tool = (f"<tool>Claude usage\n5-hour: {p5:.0f}% (resets in {until(five.get('resets_at'))})\n"
+            f"Weekly: {p7:.0f}% (resets in {until(week.get('resets_at'))})</tool>")
+    return txt + tool + "<txtclick>xdg-open https://claude.ai/settings/usage</txtclick>"
+
+
+def main():
+    try:
+        token = json.loads(CREDS.read_text())["claudeAiOauth"]["accessToken"]
+        req = urllib.request.Request(URL, headers={
+            "Authorization": f"Bearer {token}", "anthropic-beta": "oauth-2025-04-20"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            print(render(json.load(r)))
+    except Exception as e:  # shortcut: no token refresh; an expired token shows until Claude Code next refreshes it
+        print(f"<txt>Claude ?</txt><tool>Claude usage unavailable: {e}</tool>")
+
+
+if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        out = render({"five_hour": {"utilization": 95, "resets_at": "2099-01-01T00:00:00Z"},
+                      "seven_day": {"utilization": 42.4, "resets_at": None}})
+        assert "95%" in out and "#e06c75" in out and "42%" in out and "#98c379" in out, out
+        assert render({})  # missing fields don't crash
+        print("ok")
+    else:
+        main()
