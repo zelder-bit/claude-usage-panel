@@ -21,5 +21,8 @@ Command to `~/.local/bin/claude-usage-panel` (full path), Period to `300`, and u
 ## Notes
 
 - Uses the undocumented `api.anthropic.com/api/oauth/usage` endpoint (what Claude Code's `/usage` reads); it may change.
+- The endpoint rate-limits (HTTP 429), so the script calls it at most every 5 minutes whatever the genmon period,
+  waits 15 minutes after a failure, and keeps showing the last good numbers from `~/.cache/claude-usage-panel.json`.
+  The tooltip says how old they are and whether the last refresh failed.
 - It does not refresh the token. If it expires, the panel shows `Claude ?` until Claude Code next runs.
 - `claude-usage-panel --selftest` checks the formatting without a network call.
